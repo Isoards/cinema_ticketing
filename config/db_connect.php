@@ -72,25 +72,39 @@ class DatabaseConnection {
 
     // INSERT, UPDATE, DELETE 쿼리 실행
     public function executeNonQuery($sql, $params = []) {
-        $stmt = oci_parse($this->conn, $sql);
+        try {
+            // SQL 문 파싱
+            $stmt = oci_parse($this->conn, $sql);
+            if (!$stmt) {
+                throw new Exception("SQL 파싱 에러");
+            }
 
-        // 바인드 변수 처리
-        foreach ($params as $key => $value) {
-            oci_bind_by_name($stmt, ":$key", $value);
+            // 단순 바인딩 처리
+            foreach ($params as $key => $value) {
+                oci_bind_by_name($stmt, ":$key", $params[$key]);
+            }
+
+            // 실행
+            $success = oci_execute($stmt, OCI_DEFAULT);
+            if (!$success) {
+                $error = oci_error($stmt);
+                throw new Exception($error['message']);
+            }
+
+            // 커밋
+            oci_commit($this->conn);
+
+            // 정리
+            oci_free_statement($stmt);
+
+            return true;
+
+        } catch (Exception $e) {
+            // 롤백
+            oci_rollback($this->conn);
+            throw $e;
         }
-
-        $result = oci_execute($stmt);
-
-        if (!$result) {
-            $e = oci_error($stmt);
-            throw new Exception($e['message']);
-        }
-
-        $rowCount = oci_num_rows($stmt);
-        oci_free_statement($stmt);
-        return $rowCount;
     }
-
     // 시퀀스에서 다음 값 가져오기
     public function getNextSequenceValue($sequenceName) {
         $sql = "SELECT $sequenceName.NEXTVAL FROM DUAL";
