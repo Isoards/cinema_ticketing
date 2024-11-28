@@ -1,9 +1,6 @@
 <?php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
+require_once '../includes/header.php';
 require_once '../config/db_connect.php';
-session_start();
 
 // 로그인 체크
 if (!isset($_SESSION['user_id'])) {
@@ -20,31 +17,21 @@ try {
         throw new Exception('예약 정보가 없습니다.');
     }
 
-    // 예약 상세 정보 조회
+    $reservationsql = "SELECT r.*,
+       TO_CHAR(s.start_time, 'YYYY-MM-DD HH24:MI:SS') as start_time,
+       TO_CHAR(s.end_time, 'YYYY-MM-DD HH24:MI:SS') as end_time,
+       m.title, m.running_time, t.theater_name, m.age_rating
+FROM RESERVATIONS r
+JOIN SCHEDULES s on r.schedule_id = s.schedule_id
+JOIN MOVIES m on s.movie_id = m.movie_id
+JOIN THEATERS t on s.theater_id = t.theater_id
+     WHERE reservation_id = :reservation_id";
+
     $reservationInfo = $db->executeQuery(
-        "SELECT 
-            r.reservation_id,
-            r.total_price,
-            r.reservation_date,
-            r.status as reservation_status,
-            r.payment_method,
-            m.title as movie_title,
-            m.running_time,
-            m.age_rating,
-            t.theater_name,
-            s.start_time,
-            s.end_time
-         FROM RESERVATIONS r
-         JOIN SCHEDULES s ON r.schedule_id = s.schedule_id
-         JOIN MOVIES m ON s.movie_id = m.movie_id
-         JOIN THEATERS t ON s.theater_id = t.theater_id
-         WHERE r.reservation_id = :reservation_id
-         AND r.user_id = :user_id",
-        [
-            'reservation_id' => $reservationId,
-            'user_id' => $_SESSION['user_id']
-        ]
+        $reservationsql,
+        ['reservation_id' => $reservationId]
     );
+
 
     if (empty($reservationInfo)) {
         throw new Exception('유효하지 않은 예약입니다.');
@@ -54,9 +41,7 @@ try {
     $reservedSeats = $db->executeQuery(
         "SELECT 
             ts.seat_row,
-            ts.seat_number,
-            ts.seat_type,
-            rs.price
+            ts.seat_number
          FROM RESERVATION_SEATS rs
          JOIN THEATER_SEATS ts ON rs.seat_id = ts.seat_id
          WHERE rs.reservation_id = :reservation_id
@@ -68,9 +53,11 @@ try {
 
 } catch (Exception $e) {
     error_log("Error: " . $e->getMessage());
+    echo "구체적인 오류 메시지: " . $e->getMessage(); // 임시로 추가
     $error_message = "시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
 }
 ?>
+
 
 <!DOCTYPE html>
 <html lang="ko">
@@ -81,24 +68,6 @@ try {
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 </head>
 <body class="bg-gray-100">
-<!-- 앱바 -->
-<div class="bg-white shadow-md">
-    <div class="container mx-auto px-4">
-        <div class="flex items-center justify-between h-16">
-            <div class="flex items-center">
-                <a href="index.php" class="text-gray-700 hover:text-gray-900">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                    </svg>
-                </a>
-            </div>
-            <div class="flex items-center">
-                <span class="text-xl font-semibold text-gray-900">무비핑</span>
-            </div>
-            <div class="w-6"></div>
-        </div>
-    </div>
-</div>
 
 <div class="container mx-auto p-4">
     <?php if (isset($error_message)): ?>
@@ -122,15 +91,9 @@ try {
                 </div>
                 <div>
                     <p class="text-gray-600">예약 일시</p>
-                    <p class="font-bold"><?= date('Y년 m월 d일 H:i', strtotime($reservationInfo['RESERVATION_DATE'])) ?></p>
-                </div>
-                <div>
-                    <p class="text-gray-600">결제 방법</p>
-                    <p class="font-bold"><?= htmlspecialchars($reservationInfo['PAYMENT_METHOD']) ?></p>
-                </div>
-                <div>
-                    <p class="text-gray-600">결제 금액</p>
-                    <p class="font-bold"><?= number_format($reservationInfo['TOTAL_PRICE']) ?>원</p>
+                    <p class="font-bold"><?php
+                    $dateTime = DateTime::createFromFormat('d-M-y h.i.s.u A', $reservationInfo['RESERVATION_DATE']);
+                    echo $dateTime->format('Y년 m월 d일 H:i');?></p>
                 </div>
             </div>
         </div>
@@ -142,7 +105,7 @@ try {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <p class="text-gray-600">영화</p>
-                    <p class="font-bold"><?= htmlspecialchars($reservationInfo['MOVIE_TITLE']) ?></p>
+                    <p class="font-bold"><?= htmlspecialchars($reservationInfo['TITLE']) ?></p>
                 </div>
                 <div>
                     <p class="text-gray-600">상영관</p>
@@ -151,9 +114,10 @@ try {
                 <div>
                     <p class="text-gray-600">상영 시간</p>
                     <p class="font-bold">
-                        <?= date('Y년 m월 d일 H:i', strtotime($reservationInfo['START_TIME'])) ?> ~
+                    <?= date('Y년 m월 d일 H:i', strtotime($reservationInfo['START_TIME'])) ?> ~
                         <?= date('H:i', strtotime($reservationInfo['END_TIME'])) ?>
                     </p>
+
                 </div>
                 <div>
                     <p class="text-gray-600">러닝타임 / 관람등급</p>
@@ -181,12 +145,6 @@ try {
                             <td class="px-6 py-4 whitespace-nowrap">
                                 <?= htmlspecialchars($seat['SEAT_ROW']) ?><?= htmlspecialchars($seat['SEAT_NUMBER']) ?>
                             </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <?= htmlspecialchars($seat['SEAT_TYPE']) ?>
-                            </td>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <?= number_format($seat['PRICE']) ?>원
-                            </td>
                         </tr>
                     <?php endforeach; ?>
                     </tbody>
@@ -196,10 +154,10 @@ try {
 
         <!-- 버튼 -->
         <div class="flex justify-center space-x-4">
-            <a href="index.php" class="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600">
+            <a href="../index.php" class="bg-gray-500 text-white px-6 py-2 rounded hover:bg-gray-600">
                 홈으로
             </a>
-            <a href="my_reservations.php" class="bg-red-500 text-white px-6 py-2 rounded hover:bg-red-600">
+            <a href="../mypage" class="bg-red-500 text-white px-6 py-2 rounded hover:bg-red-600">
                 예매 내역 보기
             </a>
         </div>

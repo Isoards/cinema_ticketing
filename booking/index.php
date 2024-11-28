@@ -119,6 +119,14 @@ try {
     $theaterId = $_GET['theater'] ?? null;
     $movieId = $_GET['movie'] ?? null;
 
+    // 극장 ID 확인
+    $theaterQuery = "SELECT theater_id FROM THEATERS WHERE theater_id = :theater_id";
+    $validTheaterId = $db->executeQuery($theaterQuery, ['theater_id' => $theaterId]);
+
+    // 영화 ID 확인
+    $movieQuery = "SELECT movie_id FROM MOVIES WHERE movie_id = :movie_id";
+    $validMovieId = $db->executeQuery($movieQuery, ['movie_id' => $movieId]);
+
     echo "검색 조건:<br>";
     echo "극장 ID: " . htmlspecialchars($theaterId) . "<br>";
     echo "영화 ID: " . htmlspecialchars($movieId) . "<br><br>";
@@ -143,12 +151,18 @@ try {
     JOIN THEATERS t on s.theater_id = t.theater_id
     JOIN MOVIES m on s.movie_id = m.movie_id
     WHERE s.theater_id= :theater_id AND s.movie_id= :movie_id", [
-            'theater_id' => $theaterId,
-            'movie_id' => $movieId
+        'theater_id' => $validTheaterId[0]['THEATER_ID'],
+        'movie_id' => $validMovieId[0]['MOVIE_ID']
         ]);
-
         // 결과 상세 출력
         var_dump($schedules);
+
+        $sql = $db->executeQuery("SELECT s.*, t.theater_name, m.title
+    FROM SCHEDULES s
+    JOIN THEATERS t on s.theater_id = t.theater_id
+    JOIN MOVIES m on s.movie_id = m.movie_id",);
+
+    var_dump($sql);
 
 
     echo "조회 결과:<br>";

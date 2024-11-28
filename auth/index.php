@@ -3,7 +3,7 @@ error_reporting(E_ALL);
 ini_set("display_errors", 1);
 
 session_start();
-require_once '../config/db_connect.php';  // DatabaseConnection 클래스 포함
+require_once '../config/db_connect.php';
 
 try {
     $db = DatabaseConnection::getInstance();

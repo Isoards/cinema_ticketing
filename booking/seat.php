@@ -19,13 +19,10 @@ try {
                     m.movie_id,
                     m.title as movie_title,
                     m.running_time,
-                    m.age_rating,
-                    p.category_name,
-                    p.base_price
+                    m.age_rating
              FROM SCHEDULES s
              JOIN THEATERS t ON s.theater_id = t.theater_id
              JOIN MOVIES m ON s.movie_id = m.movie_id
-             JOIN PRICE_CATEGORIES p ON s.price_category_id = p.category_id
              WHERE s.schedule_id = :schedule_id",
             ['schedule_id' => $scheduleId]
         );
@@ -47,8 +44,7 @@ try {
         $seats = $db->executeQuery(
             "SELECT TS.SEAT_ID, 
                 TS.SEAT_ROW, 
-                TS.SEAT_NUMBER, 
-                TS.SEAT_TYPE,
+                TS.SEAT_NUMBER,
                 NVL(SS.STATUS, 'AVAILABLE') as STATUS
          FROM THEATER_SEATS TS
          LEFT OUTER JOIN SCHEDULE_SEATS SS 
@@ -222,7 +218,7 @@ try {
                 <p><?= date('Y년 m월 d일 H:i', strtotime($scheduleInfo['START_TIME'])) ?> ~
                     <?= date('H:i', strtotime($scheduleInfo['END_TIME'])) ?></p>
                 <p>상영시간: <?= $scheduleInfo['RUNNING_TIME'] ?>분 | <?= $scheduleInfo['AGE_RATING'] ?></p>
-                <p>기본가격: <?= number_format($scheduleInfo['BASE_PRICE']) ?>원</p>
+
             </div>
         </div>
 
@@ -258,16 +254,7 @@ try {
 
                         // 좌석 타입에 따른 클래스 설정
                         $seatClass = 'seat ';
-                        switch ($seat['SEAT_TYPE']) {
-                            case 'VIP':
-                                $seatClass .= 'vip';
-                                break;
-                            case 'DISABLED':
-                                $seatClass .= 'disabled';
-                                break;
-                            default:
-                                $seatClass .= 'standard';
-                        }
+
 
                         if ($seat['STATUS'] !== 'AVAILABLE') {
                             $seatClass .= ' occupied';
@@ -275,7 +262,6 @@ try {
                         ?>
                         <div class="<?= $seatClass ?>"
                              data-seat-id="<?= $seat['SEAT_ID'] ?>"
-                             data-seat-type="<?= $seat['SEAT_TYPE'] ?>"
                              data-status="<?= $seat['STATUS'] ?>">
                             <?= $seat['SEAT_NUMBER'] ?>
                         </div>
@@ -290,10 +276,6 @@ try {
                 <div class="seat-info">
                 <!-- 좌석 범례 -->
                 <div class="legend">
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #E9D5FF;"></div>
-                        <span>VIP</span>
-                    </div>
                     <div class="legend-item">
                         <div class="legend-color" style="background-color: #DBEAFE;"></div>
                         <span>일반</span>
@@ -322,7 +304,6 @@ try {
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const selectedSeats = new Set();
-            const basePrice = <?= $scheduleInfo['BASE_PRICE'] ?>;
             const form = document.getElementById('reservationForm');
             const submitButton = form.querySelector('button[type="submit"]');
 
@@ -389,7 +370,6 @@ try {
             function updateSelectedSeatsInfo() {
                 // 기존 updateSelectedSeatsInfo 함수 내용
                 const seatList = document.getElementById('seatList');
-                const totalPrice = document.getElementById('totalPrice');
                 let selectedSeatsArray = [];
 
                 selectedSeats.forEach(seatId => {
@@ -402,9 +382,6 @@ try {
                 seatList.textContent = selectedSeatsArray.length > 0 ?
                     `선택한 좌석: ${selectedSeatsArray.join(', ')}` :
                     '선택한 좌석이 없습니다.';
-
-                const total = basePrice * selectedSeatsArray.length;
-                totalPrice.textContent = `총 금액: ${total.toLocaleString()}원`;
 
                 submitButton.disabled = selectedSeatsArray.length === 0;
             }

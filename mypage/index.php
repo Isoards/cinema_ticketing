@@ -39,22 +39,27 @@ try {
     $profile = $db->executeQuery($profile_query, ['user_id' => $user_id]);
 
     // 예약 내역 조회
-    $reservation_query = "
-        SELECT r.*, m.title, t.theater_name, s.start_time, s.end_time,
-               LISTAGG(ts.seat_row || ts.seat_number, ', ') WITHIN GROUP (ORDER BY ts.seat_row, ts.seat_number) as seats
-        FROM reservations r
-        JOIN schedules s ON r.schedule_id = s.schedule_id
-        JOIN movies m ON s.movie_id = m.movie_id
-        JOIN theaters t ON s.theater_id = t.theater_id
-        JOIN reservation_seats rs ON r.reservation_id = rs.reservation_id
-        JOIN theater_seats ts ON rs.seat_id = ts.seat_id
-        WHERE r.user_id = :user_id
-        GROUP BY r.reservation_id, r.user_id, r.schedule_id, r.total_price, 
-                 r.status, r.reservation_date, r.payment_method, r.payment_status,
-                 m.title, t.theater_name, s.start_time, s.end_time
+    $reservation_query = "SELECT r.*, TO_CHAR(s.start_time, 'YYYY-MM-DD HH24:MI:SS') as start_time, s.end_time, m.title, m.running_time, t.theater_name
+FROM RESERVATIONS r
+JOIN SCHEDULES s on r.schedule_id = s.schedule_id
+JOIN MOVIES m on s.movie_id = m.movie_id
+JOIN THEATERS t on s.theater_id = t.theater_id
         ORDER BY r.reservation_date DESC
     ";
-    $reservations = $db->executeQuery($reservation_query, ['user_id' => $user_id]);
+
+    $reservations = $db->executeQuery($reservation_query, );
+
+    // 예약된 좌석 정보 조회
+    $reservedSeats = $db->executeQuery(
+        "SELECT ts.seat_row, ts.seat_number, u.user_id
+FROM RESERVATION_SEATS rs
+JOIN THEATER_SEATS ts ON ts.seat_id = rs.seat_id
+JOIN RESERVATIONS r on rs.reservation_id = r.reservation_id
+JOIN USERS u on r.user_id = u.user_id
+WHERE u.user_id = :user_id
+         ORDER BY ts.seat_row, ts.seat_number",
+        ['user_id' => $user_id]
+    );
 
     // 리뷰 내역 조회
     $review_query = "
@@ -133,8 +138,14 @@ try {
                                     <div class="mt-2 space-y-1 text-gray-600">
                                         <p><span class="font-medium">극장:</span> <?php echo htmlspecialchars($reservation['THEATER_NAME']); ?></p>
                                         <p><span class="font-medium">상영 시간:</span> <?php echo date('Y-m-d H:i', strtotime($reservation['START_TIME'])); ?></p>
-                                        <p><span class="font-medium">좌석:</span> <?php echo htmlspecialchars($reservation['SEATS']); ?></p>
-                                        <p><span class="font-medium">결제 금액:</span> <?php echo number_format($reservation['TOTAL_PRICE']); ?>원</p>
+                                        <p><span class="font-medium">좌석:</span> </p>
+                                        <?php foreach ($reservedSeats as $seat): ?>
+                                            <tr>
+                                                <td class="px-6 py-4 whitespace-nowrap">
+                                                    <?= htmlspecialchars($seat['SEAT_ROW']) ?><?= htmlspecialchars($seat['SEAT_NUMBER']) ?>
+                                                </td>
+                                            </tr>
+                                        <?php endforeach; ?>
                                         <p>
                                             <span class="font-medium">예약 상태:</span>
                                             <span class="<?php echo $reservation['STATUS'] == 'Confirmed' ? 'text-green-600' : 'text-red-600'; ?> font-medium">
