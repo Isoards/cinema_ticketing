@@ -27,7 +27,7 @@ try {
 <body class="bg-gray-100">
 <!-- 영화 목록 섹션 -->
 <div class="container mx-auto px-4 py-8">
-    <h2 class="text-2xl font-bold mb-6">현재 상영작</h2>
+    <h2 class="text-3xl font-bold mb-8 text-center text-gray-800">현재 상영작</h2>
     <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
         <?php foreach ($movies as $movie): ?>
             <div class="bg-white rounded-lg shadow overflow-hidden">

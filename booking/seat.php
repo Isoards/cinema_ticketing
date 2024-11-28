@@ -2,7 +2,7 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-require_once '../includes/db_connect.php';
+require_once '../config/db_connect.php';
 
 try {
     $db = DatabaseConnection::getInstance();
@@ -61,15 +61,6 @@ try {
                 'schedule_id' => $scheduleId
             ]
         );
-
-        // 디버깅: J행 10번 좌석 상태 확인
-        foreach($seats as $seat) {
-            if($seat['SEAT_ROW'] === 'J' && $seat['SEAT_NUMBER'] == 10) {
-                echo "<pre>J10 Seat Status: ";
-                print_r($seat);
-                echo "</pre>";
-            }
-        }
 
         return $seats;  // 그룹화하지 않고 정렬된 순서 그대로 반환
     }
@@ -335,7 +326,7 @@ try {
             const form = document.getElementById('reservationForm');
             const submitButton = form.querySelector('button[type="submit"]');
 
-            // 좌석 클릭 이벤트 처리
+            // 좌석 클릭 이벤트 처리 (기존 코드와 동일)
             document.querySelectorAll('.seat').forEach(seat => {
                 if (seat.getAttribute('data-status') === 'AVAILABLE') {
                     seat.addEventListener('click', function() {
@@ -358,7 +349,45 @@ try {
                 }
             });
 
+            // 폼 제출 이벤트 처리
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                if (selectedSeats.size === 0) {
+                    alert('좌석을 선택해주세요.');
+                    return;
+                }
+
+                const formData = new FormData(form);
+
+                // 선택된 좌석 정보 추가
+                formData.set('selected_seats', Array.from(selectedSeats).join(','));
+
+                submitButton.disabled = true;
+                submitButton.textContent = '예약 처리중...';
+
+                fetch('process_reservation.php', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('예약이 완료되었습니다.');
+                            window.location.href = 'reservation_complete.php?id=' + data.reservation_id;
+                        } else {
+                            throw new Error(data.message || '예약 처리 중 오류가 발생했습니다.');
+                        }
+                    })
+                    .catch(error => {
+                        alert(error.message);
+                        submitButton.disabled = false;
+                        submitButton.textContent = '예약하기';
+                    });
+            });
+
             function updateSelectedSeatsInfo() {
+                // 기존 updateSelectedSeatsInfo 함수 내용
                 const seatList = document.getElementById('seatList');
                 const totalPrice = document.getElementById('totalPrice');
                 let selectedSeatsArray = [];
@@ -378,17 +407,6 @@ try {
                 totalPrice.textContent = `총 금액: ${total.toLocaleString()}원`;
 
                 submitButton.disabled = selectedSeatsArray.length === 0;
-
-                // Form data update
-                const existingInput = document.querySelector('input[name="selected_seats"]');
-                if (existingInput) {
-                    existingInput.remove();
-                }
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'selected_seats';
-                input.value = Array.from(selectedSeats).join(',');
-                form.appendChild(input);
             }
         });
     </script>

@@ -137,7 +137,7 @@ $director_names = !empty($directors) ? implode(', ', array_column($directors, 'P
                         </div>
                     <?php endif; ?>
 
-                    <button onclick="location.href='/booking?movie_id=<?= $movie['MOVIE_ID'] ?>'"
+                    <button onclick="location.href='/movie/booking/?movie=<?= $movie_id ?>'"
                             class="w-full md:w-auto bg-red-500 text-white px-8 py-3 rounded-lg hover:bg-red-600 transition-colors">
                         예매하기
                     </button>

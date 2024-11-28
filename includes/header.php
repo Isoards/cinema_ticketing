@@ -35,9 +35,21 @@ session_start(); // 세션 시작
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                         </svg>
                     </a>
-                    <a href="/auth/logout.php" class="hover:text-red-500 transition-colors">로그아웃</a>
+                    <a href="#" onclick="handleLogout(event)" class="hover:text-red-500 transition-colors">로그아웃</a>
+                    <script>
+                        function handleLogout(event) {
+                            event.preventDefault();
+                            if (confirm('로그아웃 하시겠습니까?')) {
+                                fetch('/movie/auth/logout.php')
+                                    .then(() => {
+                                        alert('로그아웃 되었습니다.');
+                                        window.location.href = '../index.php';
+                                    });
+                            }
+                        }
+                    </script>
                 <?php else: ?>
-                    <a href="/auth/login.php" class="hover:text-red-500 transition-colors">로그인</a>
+                    <a href="/movie/auth" class="hover:text-red-500 transition-colors">로그인</a>
                 <?php endif; ?>
             </div>
         </div>
