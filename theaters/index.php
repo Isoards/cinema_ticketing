@@ -1,9 +1,6 @@
 <?php
-error_reporting(E_ALL);
-ini_set("display_errors", 1);
-
 require_once '../includes/header.php';
-require_once '../config/db_connect.php';
+require_once '../includes/db_connect.php';
 
 try {
     $db = DatabaseConnection::getInstance();
@@ -54,7 +51,7 @@ try {
                             <td class="text-center border px-6 py-4"><?php echo htmlspecialchars($theater['THEATER_NAME']); ?></td>
                             <td class="text-center border px-6 py-4"><?php echo htmlspecialchars($theater['LOCATION']); ?></td>
                             <td class="border px-6 py-4">
-                                <a href="theater_details.php?theater_id=<?= urlencode($theater['THEATER_ID']) ?>"
+                                <a href="theater_detail.php?theater_id=<?= urlencode($theater['THEATER_ID']) ?>"
                                    class="flex items-center justify-center gap-2 bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-lg transition-colors duration-300">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9l-5 5-5-5" />

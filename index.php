@@ -1,6 +1,6 @@
 <?php
 require_once 'includes/header.php';
-require_once 'config/db_connect.php';
+require_once 'includes/db_connect.php';
 
 try {
     $db = DatabaseConnection::getInstance();
@@ -76,7 +76,7 @@ try {
                      class="w-full h-[300px] object-cover"/>
                 <div class="p-6 text-center">
                     <h3 class="font-bold text-xl mb-2"><?= htmlspecialchars($movie['TITLE']) ?></h3>
-                    <a href="/booking?movie_id=<?= $movie['MOVIE_ID'] ?>"
+                    <a href="/movie/booking/?movie=<?= $movie['MOVIE_ID'] ?>"
                        class="bg-red-600 text-white block w-full px-4 py-2 rounded-full hover:bg-red-700 transition-colors duration-300 transform hover:scale-105">
                         예매하기
                     </a>

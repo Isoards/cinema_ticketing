@@ -2,7 +2,7 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 0); // 에러를 JSON 응답에 포함시키지 않기 위해 0으로 설정
 
-require_once '../config/db_connect.php';
+require_once '../includes/db_connect.php';
 session_start();
 
 // JSON 헤더 설정

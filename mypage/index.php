@@ -1,6 +1,6 @@
 <?php
 require_once '../includes/header.php';
-require_once '../config/db_connect.php';
+require_once '../includes/db_connect.php';
 
 // 로그인 체크
 if (!isset($_SESSION['user_id'])) {
@@ -63,7 +63,7 @@ WHERE u.user_id = :user_id
 
     // 리뷰 내역 조회
     $review_query = "
-        SELECT r.*, m.title, m.poster
+        SELECT r.*,  TO_CHAR(r.review_date, 'YYYY-MM-DD HH24:MI:SS') as review_date, m.title, m.poster
         FROM reviews r
         JOIN movies m ON r.movie_id = m.movie_id
         WHERE r.user_id = :user_id

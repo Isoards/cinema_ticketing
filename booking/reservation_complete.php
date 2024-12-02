@@ -1,6 +1,6 @@
 <?php
 require_once '../includes/header.php';
-require_once '../config/db_connect.php';
+require_once '../includes/db_connect.php';
 
 // 로그인 체크
 if (!isset($_SESSION['user_id'])) {

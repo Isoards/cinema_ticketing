@@ -1,9 +1,7 @@
 <?php
-error_reporting(E_ALL);
-ini_set("display_errors", 1);
+require_once '../includes/header.php';
+require_once '../includes/db_connect.php';
 
-session_start();
-require_once '../config/db_connect.php';
 // 로그인 체크
 if (!isset($_SESSION['user_id'])) {
     echo "<script>alert('로그인이 필요한 서비스입니다.'); window.location.href='../auth/index.php';</script>";
