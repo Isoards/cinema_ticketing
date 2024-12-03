@@ -14,6 +14,7 @@ try {
     $theaters = [];
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>

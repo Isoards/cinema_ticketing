@@ -19,6 +19,7 @@ try {
             SELECT 
                 s.schedule_id, 
                 m.title, 
+                m.running_time,
                 TO_CHAR(s.start_time, 'YYYY-MM-DD HH24:MI:SS') AS start_time, 
                 TO_CHAR(s.end_time, 'YYYY-MM-DD HH24:MI:SS') AS end_time
             FROM schedules s
@@ -105,6 +106,19 @@ try {
         const firstDay = new Date(currentYear, currentMonth, 1).getDay();
         const lastDate = new Date(currentYear, currentMonth + 1, 0).getDate();
 
+        // 해당 월에 스케줄이 있는 날짜들을 Set으로 만듦
+        const datesWithSchedule = new Set(
+            scheduleDetails
+                .map(schedule => {
+                    const date = new Date(schedule.START_TIME);
+                    if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
+                        return date.getDate();
+                    }
+                    return null;
+                })
+                .filter(date => date !== null)
+        );
+
         calendarGrid.innerHTML = '';
 
         // Add weekday headers
@@ -119,7 +133,13 @@ try {
         // Add date cells
         for (let i = 1; i <= lastDate; i++) {
             const dateElement = document.createElement('div');
-            dateElement.className = 'bg-gray-100 p-2 text-center rounded cursor-pointer hover:bg-red-100 transition-colors duration-200';
+            // 스케줄이 있는 날짜는 다른 스타일 적용
+            const hasSchedule = datesWithSchedule.has(i);
+            dateElement.className = `p-2 text-center rounded cursor-pointer transition-colors duration-200 ${
+                hasSchedule
+                    ? 'bg-red-200 hover:bg-red-300 font-semibold'
+                    : 'bg-gray-100 hover:bg-red-100'
+            }`;
             dateElement.textContent = i;
             dateElement.addEventListener('click', () => loadSchedules(i));
             calendarGrid.appendChild(dateElement);
@@ -150,21 +170,14 @@ try {
 
                 scheduleItem.innerHTML = `
                         <div class="text-xl font-bold mb-4 text-gray-800">${schedule.TITLE}</div>
-                        <div class="space-y-2 text-gray-600">
-                            <p class="flex items-center">
-                                <span class="font-semibold w-24">시작 시간:</span>
-                                <span>${new Date(schedule.START_TIME).toLocaleString()}</span>
-                            </p>
-                            <p class="flex items-center">
-                                <span class="font-semibold w-24">종료 시간:</span>
-                                <span>${new Date(schedule.END_TIME).toLocaleString()}</span>
-                            </p>
-                        </div>
-                        <div class="mt-4 text-right">
-                            <span class="text-red-500 hover:text-red-600 font-semibold">
-                                예매하기 →
-                            </span>
-                        </div>
+<p class="flex items-center">
+    <span class="font-semibold w-24">시작 시간:</span>
+    <span>${new Date(schedule.START_TIME).toLocaleString()}</span>
+</p>
+<p class="flex items-center">
+    <span class="font-semibold w-24">종료 시간:</span>
+    <span>${new Date(new Date(schedule.START_TIME).getTime() + schedule.RUNNING_TIME * 60000).toLocaleString()}</span>
+</p>
                     `;
 
                 scheduleList.appendChild(scheduleItem);

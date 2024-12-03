@@ -5,66 +5,29 @@ require_once '../includes/db_connect.php';
 try {
     $db = DatabaseConnection::getInstance();
 
-    // 스케줄 정보 가져오기
-    function getScheduleInfo($scheduleId) {
-        global $db;
-        return $db->executeQuery(
-            "SELECT s.schedule_id, 
-                    s.start_time,
-                    s.end_time,
-                    t.theater_id,
-                    t.theater_name,
-                    m.movie_id,
-                    m.title as movie_title,
-                    m.running_time,
-                    m.age_rating
-             FROM SCHEDULES s
-             JOIN THEATERS t ON s.theater_id = t.theater_id
-             JOIN MOVIES m ON s.movie_id = m.movie_id
-             WHERE s.schedule_id = :schedule_id",
-            ['schedule_id' => $scheduleId]
-        );
-    }
-
-    // 좌석 정보 가져오기 - 행별로 그룹화
-    function getSeatsGroupedByRow($theaterId, $scheduleId) {
-        global $db;
-
-        // 디버깅: SCHEDULE_SEATS 테이블 확인
-        $checkScheduleSeats = $db->executeQuery(
-            "SELECT * FROM SCHEDULE_SEATS WHERE SCHEDULE_ID = :schedule_id",
-            ['schedule_id' => $scheduleId]
-        );
-        echo "<pre>Schedule Seats Status: ";
-        print_r($checkScheduleSeats);
-        echo "</pre>";
-
-        $seats = $db->executeQuery(
-            "SELECT TS.SEAT_ID, 
-                TS.SEAT_ROW, 
-                TS.SEAT_NUMBER,
-                NVL(SS.STATUS, 'AVAILABLE') as STATUS
-         FROM THEATER_SEATS TS
-         LEFT OUTER JOIN SCHEDULE_SEATS SS 
-             ON TS.SEAT_ID = SS.SEAT_ID 
-             AND SS.SCHEDULE_ID = :schedule_id
-         WHERE TS.THEATER_ID = :theater_id
-         ORDER BY TS.SEAT_ROW, TS.SEAT_NUMBER",
-            [
-                'theater_id' => $theaterId,
-                'schedule_id' => $scheduleId
-            ]
-        );
-
-        return $seats;  // 그룹화하지 않고 정렬된 순서 그대로 반환
-    }
-
     $scheduleId = $_GET['schedule'] ?? '';
     if (empty($scheduleId)) {
         throw new Exception('상영 일정 정보가 없습니다.');
     }
 
-    $scheduleInfo = getScheduleInfo($scheduleId);
+    // 스케줄 정보 조회
+    $scheduleInfo = $db->executeQuery(
+        "SELECT s.schedule_id, 
+                TO_CHAR(s.start_time, 'YYYY-MM-DD HH24:MI:SS') AS start_time, 
+                TO_CHAR(s.end_time, 'YYYY-MM-DD HH24:MI:SS') AS end_time,
+                t.theater_id,
+                t.theater_name,
+                m.movie_id,
+                m.title as movie_title,
+                m.running_time,
+                m.age_rating
+         FROM SCHEDULES s
+         JOIN THEATERS t ON s.theater_id = t.theater_id
+         JOIN MOVIES m ON s.movie_id = m.movie_id
+         WHERE s.schedule_id = :schedule_id",
+        ['schedule_id' => $scheduleId]
+    );
+
     if (empty($scheduleInfo)) {
         throw new Exception('잘못된 상영 일정입니다.');
     }
@@ -72,11 +35,43 @@ try {
     $scheduleInfo = $scheduleInfo[0];
     $theaterId = $scheduleInfo['THEATER_ID'];
 
+    $theaterSeats = $db->executeQuery(
+        "SELECT SEAT_ID, SEAT_ROW, SEAT_NUMBER
+     FROM THEATER_SEATS 
+     WHERE THEATER_ID = :theater_id
+     ORDER BY SEAT_ROW, SEAT_NUMBER",
+        ['theater_id' => $theaterId]
+    );
+
+    $scheduleSeats = $db->executeQuery(
+        "SELECT SEAT_ID, STATUS
+     FROM SCHEDULE_SEATS 
+     WHERE SCHEDULE_ID = :schedule_id",
+        ['schedule_id' => $scheduleId]
+    );
+
+    $seats = [];
+    foreach ($theaterSeats as $seat) {
+        $seatStatus = 'AVAILABLE';
+
+        foreach ($scheduleSeats as $scheduleSeat) {
+            if ($scheduleSeat['SEAT_ID'] === $seat['SEAT_ID']) {
+                $seatStatus = $scheduleSeat['STATUS'];
+                break;
+            }
+        }
+
+        $seats[] = [
+            'SEAT_ID' => $seat['SEAT_ID'],
+            'SEAT_ROW' => $seat['SEAT_ROW'],
+            'SEAT_NUMBER' => $seat['SEAT_NUMBER'],
+            'STATUS' => $seatStatus
+        ];
+    }
 } catch (Exception $e) {
     error_log("Error: " . $e->getMessage());
     $error_message = "시스템 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
 }
-
 ?>
 
 <!DOCTYPE html>
@@ -86,13 +81,11 @@ try {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>좌석 예약 - <?= htmlspecialchars($scheduleInfo['MOVIE_TITLE'] ?? '') ?></title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
-    <link href="https://unpkg.com/heroicons@2.0.18/outline" rel="stylesheet">
     <style>
         .seating-layout {
             width: 100%;
             max-width: 1000px;
             margin: 0 auto;
-
         }
         .seat-row {
             width: 100%;
@@ -123,22 +116,17 @@ try {
             cursor: pointer;
             font-size: 0.9rem;
             border: 1px solid rgba(0,0,0,0.1);
-        }
-        .seat.vip {
-            background-color: #E9D5FF;
-        }
-        .seat.standard {
             background-color: #DBEAFE;
-        }
-        .seat.disabled {
-            background-color: #FEF3C7;
         }
         .seat.occupied {
             background-color: #D1D5DB;
             cursor: not-allowed;
+            pointer-events: none;
+            opacity: 0.8;
+            color: #6B7280;
         }
         .seat.selected {
-            background-color: #34D399 !important;
+            background-color: #e02727 !important;
             color: white;
         }
         .seat:not(.occupied):hover {
@@ -175,11 +163,10 @@ try {
 </head>
 <body class="bg-gray-100">
 
-<!-- 앱바 추가 -->
+<!-- 앱바 -->
 <div class="bg-white shadow-md">
     <div class="container mx-auto px-4">
         <div class="flex items-center justify-between h-16">
-            <!-- 뒤로가기 버튼 -->
             <div class="flex items-center">
                 <a href="index.php" class="text-gray-700 hover:text-gray-900">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -187,19 +174,13 @@ try {
                     </svg>
                 </a>
             </div>
-
-            <!-- 로고와 이름 -->
             <div class="flex items-center">
-<!--                <img src="/path/to/your/logo.png" alt="Logo" class="h-8 w-8 mr-2">-->
                 <span class="text-xl font-semibold text-gray-900">무비핑</span>
             </div>
-
-            <!-- 우측 여백을 위한 빈 div (균형을 맞추기 위함) -->
             <div class="w-6"></div>
         </div>
     </div>
 </div>
-
 
 <?php if (isset($error_message)): ?>
     <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -212,11 +193,14 @@ try {
         <div class="bg-white p-4 rounded-lg shadow mb-4">
             <h1 class="text-2xl font-bold mb-2"><?= htmlspecialchars($scheduleInfo['MOVIE_TITLE']) ?></h1>
             <div class="text-gray-600">
+                <?php
+                $start_time = strtotime($scheduleInfo['START_TIME']);
+                $end_time = strtotime("+{$scheduleInfo['RUNNING_TIME']} minutes", $start_time);
+                ?>
+                <p><?= date('Y년 m월 d일 H:i', $start_time) ?> ~
+                    <?= date('H:i', $end_time) ?></p>
                 <p><?= htmlspecialchars($scheduleInfo['THEATER_NAME']) ?></p>
-                <p><?= date('Y년 m월 d일 H:i', strtotime($scheduleInfo['START_TIME'])) ?> ~
-                    <?= date('H:i', strtotime($scheduleInfo['END_TIME'])) ?></p>
                 <p>상영시간: <?= $scheduleInfo['RUNNING_TIME'] ?>분 | <?= $scheduleInfo['AGE_RATING'] ?></p>
-
             </div>
         </div>
 
@@ -236,13 +220,10 @@ try {
                 <div class="seating-layout">
                     <?php
                     $currentRow = '';
-                    $seats = getSeatsGroupedByRow($scheduleId, $theaterId);
-
                     foreach ($seats as $seat) {
-                        // 새로운 행이 시작될 때
                         if ($currentRow !== $seat['SEAT_ROW']) {
                             if ($currentRow !== '') {
-                                echo "</div>"; // 이전 행 닫기
+                                echo "</div></div>";
                             }
                             $currentRow = $seat['SEAT_ROW'];
                             echo "<div class='seat-row'>";
@@ -250,10 +231,7 @@ try {
                             echo "<div class='seats-container'>";
                         }
 
-                        // 좌석 타입에 따른 클래스 설정
-                        $seatClass = 'seat ';
-
-
+                        $seatClass = 'seat';
                         if ($seat['STATUS'] !== 'AVAILABLE') {
                             $seatClass .= ' occupied';
                         }
@@ -265,29 +243,30 @@ try {
                         </div>
                         <?php
                     }
-                    // 마지막 행 닫기
                     if ($currentRow !== '') {
                         echo "</div></div>";
                     }
                     ?>
                 </div>
+
                 <div class="seat-info">
-                <!-- 좌석 범례 -->
-                <div class="legend">
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #DBEAFE;"></div>
-                        <span>일반</span>
+                    <!-- 좌석 범례 -->
+                    <div class="legend">
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #DBEAFE;"></div>
+                            <span>일반</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background-color: #D1D5DB;"></div>
+                            <span>선택불가</span>
+                        </div>
                     </div>
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: #D1D5DB;"></div>
-                        <span>선택불가</span>
+                    <!-- 선택한 좌석 정보 -->
+                    <div id="selectedSeats" class="mt-4 p-4 bg-gray-50 rounded">
+                        <h3 class="font-bold mb-2">선택한 좌석</h3>
+                        <div id="seatList" class="mb-2"></div>
+                        <div id="totalPrice" class="font-bold"></div>
                     </div>
-                </div><!-- 선택한 좌석 정보 -->
-                <div id="selectedSeats" class="mt-4 p-4 bg-gray-50 rounded">
-                    <h3 class="font-bold mb-2">선택한 좌석</h3>
-                    <div id="seatList" class="mb-2"></div>
-                    <div id="totalPrice" class="font-bold"></div>
-                </div>
                 </div>
 
                 <button type="submit"
@@ -305,7 +284,6 @@ try {
             const form = document.getElementById('reservationForm');
             const submitButton = form.querySelector('button[type="submit"]');
 
-            // 좌석 클릭 이벤트 처리 (기존 코드와 동일)
             document.querySelectorAll('.seat').forEach(seat => {
                 if (seat.getAttribute('data-status') === 'AVAILABLE') {
                     seat.addEventListener('click', function() {
@@ -328,7 +306,6 @@ try {
                 }
             });
 
-            // 폼 제출 이벤트 처리
             form.addEventListener('submit', function(e) {
                 e.preventDefault();
 
@@ -338,8 +315,6 @@ try {
                 }
 
                 const formData = new FormData(form);
-
-                // 선택된 좌석 정보 추가
                 formData.set('selected_seats', Array.from(selectedSeats).join(','));
 
                 submitButton.disabled = true;
@@ -366,7 +341,6 @@ try {
             });
 
             function updateSelectedSeatsInfo() {
-                // 기존 updateSelectedSeatsInfo 함수 내용
                 const seatList = document.getElementById('seatList');
                 let selectedSeatsArray = [];
 
@@ -390,4 +364,3 @@ try {
 
 </body>
 </html>
-
