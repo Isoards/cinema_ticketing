@@ -38,28 +38,28 @@ try {
 
     $profile = $db->executeQuery($profile_query, ['user_id' => $user_id]);
 
-    // 예약 내역 조회
+// 예약 내역 조회
     $reservation_query = "SELECT r.*, TO_CHAR(s.start_time, 'YYYY-MM-DD HH24:MI:SS') as start_time, s.end_time, m.title, m.running_time, t.theater_name
 FROM RESERVATIONS r
 JOIN SCHEDULES s on r.schedule_id = s.schedule_id
 JOIN MOVIES m on s.movie_id = m.movie_id
 JOIN THEATERS t on s.theater_id = t.theater_id
-        ORDER BY r.reservation_date DESC
-    ";
+WHERE r.user_id = :user_id
+ORDER BY r.reservation_date DESC";
 
-    $reservations = $db->executeQuery($reservation_query);
+    $reservations = $db->executeQuery($reservation_query, ['user_id' => $user_id]);
 
-    // 예약된 좌석 정보 조회
-    $reservedSeats = $db->executeQuery(
-        "SELECT ts.seat_row, ts.seat_number, u.user_id
-FROM RESERVATION_SEATS rs
-JOIN THEATER_SEATS ts ON ts.seat_id = rs.seat_id
-JOIN RESERVATIONS r on rs.reservation_id = r.reservation_id
-JOIN USERS u on r.user_id = u.user_id
-WHERE u.user_id = :user_id
-         ORDER BY ts.seat_row, ts.seat_number",
-        ['user_id' => $user_id]
-    );
+// 예약된 좌석 정보 조회 함수
+    function getReservedSeats($db, $reservation_id) {
+        return $db->executeQuery(
+            "SELECT ts.seat_row, ts.seat_number
+        FROM RESERVATION_SEATS rs
+        JOIN THEATER_SEATS ts ON ts.seat_id = rs.seat_id
+        WHERE rs.reservation_id = :reservation_id
+        ORDER BY ts.seat_row, ts.seat_number",
+            ['reservation_id' => $reservation_id]
+        );
+    }
 
     // 리뷰 내역 조회
     $review_query = "
@@ -82,7 +82,7 @@ WHERE u.user_id = :user_id
     <title>마이페이지</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
 </head>
-<body class="bg-gradient-to-br from-gray-100 to-gray-200">
+ <body class="bg-gradient-to-br from-gray-100 to-gray-200">
 <div class="container mx-auto p-6">
     <div class="bg-white rounded-xl shadow-xl p-8">
         <h2 class="text-3xl text-center font-bold text-gray-800 mb-8 pb-4 border-b-2 border-red-500">마이 페이지</h2>
@@ -138,19 +138,20 @@ WHERE u.user_id = :user_id
                                     <div class="mt-2 space-y-1 text-gray-600">
                                         <p><span class="font-medium">극장:</span> <?php echo htmlspecialchars($reservation['THEATER_NAME']); ?></p>
                                         <p><span class="font-medium">상영 시간:</span> <?php echo date('Y-m-d H:i', strtotime($reservation['START_TIME'])); ?></p>
-                                        <p><span class="font-medium">좌석:</span> </p>
-                                        <?php foreach ($reservedSeats as $seat): ?>
-                                            <tr>
-                                                <td class="px-6 py-4 whitespace-nowrap">
-                                                    <?= htmlspecialchars($seat['SEAT_ROW']) ?><?= htmlspecialchars($seat['SEAT_NUMBER']) ?>
-                                                </td>
-                                            </tr>
-                                        <?php endforeach; ?>
+                                        <p><span class="font-medium">좌석:</span>
+                                            <?php
+                                            $seats = getReservedSeats($db, $reservation['RESERVATION_ID']);
+                                            foreach ($seats as $index => $seat) {
+                                                echo htmlspecialchars($seat['SEAT_ROW'] . $seat['SEAT_NUMBER']);
+                                                if ($index < count($seats) - 1) echo ", ";
+                                            }
+                                            ?>
+                                        </p>
                                         <p>
                                             <span class="font-medium">예약 상태:</span>
                                             <span class="<?php echo $reservation['STATUS'] == 'Confirmed' ? 'text-green-600' : 'text-red-600'; ?> font-medium">
-                                                    <?php echo $reservation['STATUS'] == 'Confirmed' ? '예약 완료' : '취소됨'; ?>
-                                                </span>
+                        <?php echo $reservation['STATUS'] == 'Confirmed' ? '예약 완료' : '취소됨'; ?>
+                    </span>
                                         </p>
                                     </div>
                                 </div>
@@ -178,7 +179,7 @@ WHERE u.user_id = :user_id
                                             <span class="text-sm text-gray-500">
                                                 작성일: <?php echo date('Y-m-d H:i', strtotime($review['REVIEW_DATE'])); ?>
                                             </span>
-                                        <button onclick="location.href='edit_review.php?review_id=<?php echo $review['REVIEW_ID']; ?>'"
+                                        <button onclick="location.href='../reviews/edit_review.php?review_id=<?php echo $review['REVIEW_ID']; ?>'"
                                                 class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded transition-colors duration-300">
                                             리뷰 수정
                                         </button>

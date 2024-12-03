@@ -21,31 +21,51 @@ try {
     $s_page = max($s_page, 1);
     $e_page = min($now_block * $page_num, $total_page);
     $start = ($page - 1) * $list_num;
-    $end_row = $page * $list_num;        // 수정된 부분
-    $start_row = $start;                 // 수정된 부분
 
-    // 리뷰 목록 조회
-    $sql = "
+    // 첫 번째 쿼리: 상위 경계 설정
+    $sql_upper = "
     SELECT * FROM (
-        SELECT a.*, ROWNUM AS rnum FROM (
-            SELECT r.review_id, r.rating, r.review_title,
-                   TO_CHAR(r.review_date, 'YYYY-MM-DD') as review_date,
-                   p.nickname, 
-                   m.title as movie_title
-            FROM REVIEWS r
-            JOIN PROFILES p ON r.user_id = p.user_id
-            JOIN MOVIES m ON r.movie_id = m.movie_id
-            ORDER BY r.review_date DESC
-        ) a WHERE ROWNUM <= :end_row
-    ) WHERE rnum > :start_row";
+        SELECT 
+            r.review_id, 
+            r.rating, 
+            r.review_text,
+            TO_CHAR(r.review_date, 'YYYY-MM-DD') as review_date,
+            p.nickname,
+            m.title as movie_title,
+            ROW_NUMBER() OVER (ORDER BY r.review_date DESC) as display_num
+        FROM REVIEWS r
+        JOIN PROFILES p ON r.user_id = p.user_id
+        JOIN MOVIES m ON r.movie_id = m.movie_id
+        ORDER BY r.review_date DESC
+    ) WHERE ROWNUM <= :row_limit";
 
-
-    $reviews = $db->executeQuery($sql, [
-        'start_row' => $start_row,
-        'end_row' => $end_row
+    $upper_results = $db->executeQuery($sql_upper, [
+        'row_limit' => $start + $list_num
     ]);
-    echo "<!-- Debug: Page=$page, Start=$start_row, End=$end_row -->";
 
+    // 두 번째 쿼리: 하위 경계 설정
+    $sql_lower = "
+    SELECT * FROM (
+        SELECT 
+            r.review_id, 
+            r.rating, 
+            r.review_text,
+            TO_CHAR(r.review_date, 'YYYY-MM-DD') as review_date,
+            p.nickname,
+            m.title as movie_title,
+            ROW_NUMBER() OVER (ORDER BY r.review_date DESC) as display_num
+        FROM REVIEWS r
+        JOIN PROFILES p ON r.user_id = p.user_id
+        JOIN MOVIES m ON r.movie_id = m.movie_id
+        ORDER BY r.review_date DESC
+    ) WHERE ROWNUM <= :row_start";
+
+    $lower_results = $db->executeQuery($sql_lower, [
+        'row_start' => $start
+    ]);
+
+    // 결과 합치기
+    $reviews = array_diff_key($upper_results, $lower_results);
 
 } catch (Exception $e) {
     $error_message = "오류가 발생했습니다: " . $e->getMessage();
@@ -83,7 +103,7 @@ try {
             <tr>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">번호</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">영화</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">제목</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">한줄평</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">평점</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">작성자</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">작성일</th>
@@ -93,15 +113,14 @@ try {
             <?php foreach ($reviews as $review): ?>
                 <tr class="hover:bg-gray-50">
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <?php echo htmlspecialchars($review['REVIEW_ID']); ?>
+                        <?php echo htmlspecialchars($review['DISPLAY_NUM']); ?>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         <?php echo htmlspecialchars($review['MOVIE_TITLE']); ?>
                     </td>
                     <td class="px-6 py-4">
-                        <a href="review_detail.php?id=<?php echo $review['REVIEW_ID']; ?>"
-                           class="text-sm text-gray-900 hover:text-blue-600">
-                            <?php echo htmlspecialchars($review['REVIEW_TITLE']); ?>
+                        <a class="text-sm text-gray-900">
+                            <?php echo htmlspecialchars($review['REVIEW_TEXT']); ?>
                         </a>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap">
@@ -113,7 +132,7 @@ try {
                         <?php echo htmlspecialchars($review['NICKNAME']); ?>
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        <?php echo date('Y-m-d', strtotime($review['REVIEW_DATE'])); ?>
+                        <?php echo $review['REVIEW_DATE']; ?>
                     </td>
                 </tr>
             <?php endforeach; ?>
@@ -134,8 +153,8 @@ try {
             <?php for ($print_page = $s_page; $print_page <= $e_page; $print_page++): ?>
                 <?php if ($print_page == $page): ?>
                     <span class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-blue-50 text-sm font-medium text-blue-600">
-                            <?php echo $print_page; ?>
-                        </span>
+                        <?php echo $print_page; ?>
+                    </span>
                 <?php else: ?>
                     <a href="?page=<?php echo $print_page; ?>"
                        class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
@@ -158,7 +177,7 @@ try {
     function writePost() {
         <?php if (!isset($_SESSION['user_id'])): ?>
         alert('로그인이 필요합니다.');
-        location.href = 'login.php';
+        location.href = '../auth/';
         <?php else: ?>
         location.href = 'write_review.php';
         <?php endif; ?>
