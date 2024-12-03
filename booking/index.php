@@ -5,83 +5,146 @@ require_once '../includes/header.php';
 try {
     $db = DatabaseConnection::getInstance();
 
-    // 지역 목록 가져오기
-    function getAreas() {
-        global $db;
-        return $db->executeQuery(
-            "SELECT DISTINCT location FROM THEATERS WHERE status = 'ACTIVE' ORDER BY location"
-        );
+    // 지역 목록 SQL
+    $areas_sql = "SELECT DISTINCT location FROM THEATERS WHERE status = 'ACTIVE' ORDER BY location";
+    $areas = $db->executeQuery($areas_sql);
+
+    // 극장 목록 SQL
+    $theaters_sql = isset($_GET['location'])
+        ? "SELECT t.*, 
+                (SELECT COUNT(*) FROM THEATER_SEATS ts WHERE ts.theater_id = t.theater_id) as total_seats 
+           FROM THEATERS t 
+           WHERE t.status = 'ACTIVE' AND t.location = :location"
+        : "SELECT t.*, 
+                (SELECT COUNT(*) FROM THEATER_SEATS ts WHERE ts.theater_id = t.theater_id) as total_seats 
+           FROM THEATERS t 
+           WHERE t.status = 'ACTIVE' 
+           ORDER BY t.theater_name";
+
+    $theaters = isset($_GET['location'])
+        ? $db->executeQuery($theaters_sql, ['location' => $_GET['location']])
+        : $db->executeQuery($theaters_sql);
+
+    // 선택된 극장이 있는 경우, 해당 극장을 최상단으로 이동
+    if (isset($_GET['theater'])) {
+        $selected_theater = array_filter($theaters, function($t) {
+            return $t['THEATER_ID'] == $_GET['theater'];
+        });
+
+        if (!empty($selected_theater)) {
+            $other_theaters = array_filter($theaters, function($t) {
+                return $t['THEATER_ID'] != $_GET['theater'];
+            });
+            $theaters = array_merge($selected_theater, $other_theaters);
+        }
     }
 
-    // 극장 목록 가져오기
-    function getTheaters($location = null) {
-        global $db;
-        if ($location) {
-            return $db->executeQuery(
-                "SELECT t.*, 
-                        (SELECT COUNT(*) FROM THEATER_SEATS ts WHERE ts.theater_id = t.theater_id) as total_seats 
-                 FROM THEATERS t 
-                 WHERE t.status = 'ACTIVE' AND t.location = :location",
-                ['location' => $location]
+    // 영화 목록 SQL
+    $movies_sql = "SELECT m.*, 
+        (SELECT COUNT(*) FROM REVIEWS r WHERE r.movie_id = m.movie_id) as review_count,
+        (SELECT AVG(rating) FROM REVIEWS r WHERE r.movie_id = m.movie_id) as avg_rating,
+        (SELECT LISTAGG(g.genre_name, ', ') WITHIN GROUP (ORDER BY g.genre_name)
+         FROM MOVIE_GENRES mg 
+         JOIN GENRES g ON mg.genre_id = g.genre_id 
+         WHERE mg.movie_id = m.movie_id) as genres,
+        (SELECT mc.person_name  
+         FROM MOVIE_CAST mc 
+         WHERE mc.movie_id = m.movie_id 
+         AND mc.role_type = 'DIRECTOR' 
+         AND ROWNUM = 1) as director
+    FROM MOVIES m
+    WHERE m.release_date <= SYSDATE
+    ORDER BY m.release_date DESC";
+    $movies = $db->executeQuery($movies_sql);
+
+    // 선택된 영화가 있는 경우, 해당 영화를 최상단으로 이동
+    if (isset($_GET['movie'])) {
+        $selected_movie = array_filter($movies, function($m) {
+            return $m['MOVIE_ID'] == $_GET['movie'];
+        });
+
+        if (!empty($selected_movie)) {
+            $other_movies = array_filter($movies, function($m) {
+                return $m['MOVIE_ID'] != $_GET['movie'];
+            });
+            $movies = array_merge($selected_movie, $other_movies);
+        }
+    }
+
+    // 스케줄 처리
+    $theaterId = $_GET['theater'] ?? null;
+    $movieId = $_GET['movie'] ?? null;
+    $schedules = [];
+
+    // 극장 ID 확인
+    if ($theaterId) {
+        $theater_check_sql = "SELECT theater_id FROM THEATERS WHERE theater_id = :theater_id";
+        $validTheater = $db->executeQuery($theater_check_sql, ['theater_id' => $theaterId]);
+
+        if (!empty($validTheater)) {
+            $theater_schedules_sql = "SELECT
+                s.schedule_id,
+                TO_CHAR(s.start_time, 'YYYY-MM-DD HH24:MI:SS') AS start_time, 
+                TO_CHAR(s.end_time, 'YYYY-MM-DD HH24:MI:SS') AS end_time,
+                t.theater_name,
+                m.title,
+                m.running_time
+                FROM SCHEDULES s
+                JOIN THEATERS t on s.theater_id = t.theater_id
+                JOIN MOVIES m on s.movie_id = m.movie_id
+                WHERE s.theater_id = :theater_id";
+            $schedules = $db->executeQuery($theater_schedules_sql,
+                ['theater_id' => $validTheater[0]['THEATER_ID']]
             );
         }
-        return $db->executeQuery(
-            "SELECT t.*, 
-                    (SELECT COUNT(*) FROM THEATER_SEATS ts WHERE ts.theater_id = t.theater_id) as total_seats 
-             FROM THEATERS t 
-             WHERE t.status = 'ACTIVE' 
-             ORDER BY t.theater_name"
-        );
     }
 
-    // 영화 목록 가져오기
-    function getMovies() {
-        global $db;
-        return $db->executeQuery(
-            "SELECT m.*, 
-                    (SELECT COUNT(*) FROM REVIEWS r WHERE r.movie_id = m.movie_id) as review_count,
-                    (SELECT AVG(rating) FROM REVIEWS r WHERE r.movie_id = m.movie_id) as avg_rating,
-                    (SELECT LISTAGG(g.genre_name, ', ') WITHIN GROUP (ORDER BY g.genre_name)
-                     FROM MOVIE_GENRES mg 
-                     JOIN GENRES g ON mg.genre_id = g.genre_id 
-                     WHERE mg.movie_id = m.movie_id) as genres,
-                    (SELECT mc.person_name  
-                     FROM MOVIE_CAST mc 
-                     WHERE mc.movie_id = m.movie_id 
-                     AND mc.role_type = 'DIRECTOR' 
-                     AND ROWNUM = 1) as director
-             FROM MOVIES m
-             WHERE m.release_date <= SYSDATE
-             ORDER BY m.release_date DESC"
-        );
+    // 영화 ID 확인
+    if ($movieId) {
+        $movie_check_sql = "SELECT movie_id FROM MOVIES WHERE movie_id = :movie_id";
+        $validMovie = $db->executeQuery($movie_check_sql, ['movie_id' => $movieId]);
+
+        if (!empty($validMovie)) {
+            $movie_schedules_sql = "SELECT
+                s.schedule_id,
+                TO_CHAR(s.start_time, 'YYYY-MM-DD HH24:MI:SS') AS start_time, 
+                TO_CHAR(s.end_time, 'YYYY-MM-DD HH24:MI:SS') AS end_time,
+                t.theater_name,
+                m.title,
+                m.running_time, (SELECT COUNT(*) FROM SCHEDULE_SEATS ss WHERE ss.schedule_id = s.schedule_id) as schedule_count
+                FROM SCHEDULES s
+                JOIN THEATERS t on s.theater_id = t.theater_id
+                JOIN MOVIES m on s.movie_id = m.movie_id
+                WHERE s.movie_id = :movie_id";
+            $movie_schedules = $db->executeQuery($movie_schedules_sql,
+                ['movie_id' => $validMovie[0]['MOVIE_ID']]
+            );
+
+            // 두 결과 합치기
+            if (!empty($schedules)) {
+                $schedules = array_filter($movie_schedules, function($schedule) use ($schedules) {
+                    foreach ($schedules as $theater_schedule) {
+                        if ($schedule['SCHEDULE_ID'] === $theater_schedule['SCHEDULE_ID']) {
+                            return true;
+                        }
+                    }
+                    return false;
+                });
+            } else {
+                $schedules = $movie_schedules;
+            }
+        }
     }
 
-    // 상영 스케줄 가져오기
+    $scheduleId = $_GET['schedules'] ?? null;
+    print_r($scheduleId);
 
-    function getSchedules($theaterId, $movieId, $date) {
-        global $db;
-        return $db->executeQuery(
-            "SELECT s.*, t.theater_name, m.title, m.running_time, 
-                (SELECT COUNT(*)
-                 FROM THEATER_SEATS ts
-                 WHERE ts.theater_id = s.theater_id) -
-                (SELECT COUNT(*)
-                 FROM SCHEDULE_SEATS ss
-                 WHERE ss.schedule_id = s.schedule_id
-                 AND ss.status = 'OCCUPIED') as available_seats
-         FROM SCHEDULES s
-         JOIN THEATERS t ON s.theater_id = t.theater_id
-         JOIN MOVIES m ON s.movie_id = m.movie_id
-         WHERE s.theater_id = :theater_id
-         AND s.movie_id = :movie_id
-         AND TRUNC(s.start_time) = TO_DATE(:selected_date, 'YYYY-MM-DD')",
-            [
-                'theater_id' => $theaterId,
-                'movie_id' => $movieId,
-                'selected_date' => $date
-            ]
-        );
-    }
+    $available_seat_sql = "SELECT COUNT(*)
+    FROM SCHEDULES s
+    JOIN SCHEDULE_SEATS ss ON ss.schedule_id = s.schedule_id
+    WHERE ss.SCHEDULE_ID = s.schedule_id
+    AND ss.status = 'OCCUPIED'";
+
 
 } catch (Exception $e) {
     error_log("Error: " . $e->getMessage());
@@ -101,128 +164,6 @@ try {
 </head>
 <body class="bg-gray-100">
 
-<?php if (isset($error_message)): ?>
-    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-        <span class="block sm:inline"><?php echo htmlspecialchars($error_message); ?></span>
-    </div>
-<?php endif; ?>
-
-<?php
-// 디버그 출력을 위한 설정
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
-
-
-try {
-    // 입력값 확인
-    $theaterId = $_GET['theater'] ?? null;
-    $movieId = $_GET['movie'] ?? null;
-
-    // 극장 ID 확인
-    $theaterQuery = "SELECT theater_id FROM THEATERS WHERE theater_id = :theater_id";
-    $validTheaterId = $db->executeQuery($theaterQuery, ['theater_id' => $theaterId]);
-
-    // 영화 ID 확인
-    $movieQuery = "SELECT movie_id FROM MOVIES WHERE movie_id = :movie_id";
-    $validMovieId = $db->executeQuery($movieQuery, ['movie_id' => $movieId]);
-
-    echo "검색 조건:<br>";
-    echo "극장 ID: " . htmlspecialchars($theaterId) . "<br>";
-    echo "영화 ID: " . htmlspecialchars($movieId) . "<br><br>";
-
-    // DB 연결 확인
-    echo "DB 연결 상태: ";
-    try {
-        $db = DatabaseConnection::getInstance();
-        echo "성공<br><br>";
-    } catch (Exception $e) {
-        echo "실패 - " . $e->getMessage() . "<br><br>";
-        throw $e;
-    }
-
-    // 쿼리 실행
-    echo "바인딩될 파라미터:<br>";
-    echo "theater_id: " . htmlspecialchars($theaterId) . "<br>";
-    echo "movie_id: " . htmlspecialchars($movieId) . "<br><br>";
-
-    $schedules = $db->executeQuery("SELECT s.*, t.theater_name, m.title
-    FROM SCHEDULES s
-    JOIN THEATERS t on s.theater_id = t.theater_id
-    JOIN MOVIES m on s.movie_id = m.movie_id
-    WHERE s.theater_id= :theater_id AND s.movie_id= :movie_id", [
-        'theater_id' => $validTheaterId[0]['THEATER_ID'],
-        'movie_id' => $validMovieId[0]['MOVIE_ID']
-        ]);
-        // 결과 상세 출력
-        var_dump($schedules);
-
-        $sql = $db->executeQuery("SELECT s.*, t.theater_name, m.title
-    FROM SCHEDULES s
-    JOIN THEATERS t on s.theater_id = t.theater_id
-    JOIN MOVIES m on s.movie_id = m.movie_id",);
-
-    var_dump($sql);
-
-
-    echo "조회 결과:<br>";
-    echo "총 " . count($schedules) . "개의 스케줄이 있습니다.<br><br>";
-
-    if (count($schedules) > 0) {
-        echo "<table border='1' cellpadding='5'>";
-        echo "<tr>
-                <th>Schedule ID</th>
-                <th>극장</th>
-                <th>영화</th>
-                <th>상영 시작</th>
-                <th>상영 종료</th>
-                <th>가격 정책</th>
-                <th>기본 가격</th>
-              </tr>";
-
-        foreach ($schedules as $schedule) {
-            echo "<tr>";
-            echo "<td>" . htmlspecialchars($schedule['SCHEDULE_ID']) . "</td>";
-            echo "<td>" . htmlspecialchars($schedule['THEATER_NAME']) . "</td>";
-            echo "<td>" . htmlspecialchars($schedule['MOVIE_TITLE']) . "</td>";
-            echo "<td>" . htmlspecialchars($schedule['START_TIME']) . "</td>";
-            echo "<td>" . htmlspecialchars($schedule['END_TIME']) . "</td>";
-            echo "<td>" . htmlspecialchars($schedule['CATEGORY_NAME']) . "</td>";
-            echo "<td>" . htmlspecialchars($schedule['BASE_PRICE']) . "</td>";
-            echo "</tr>";
-        }
-        echo "</table>";
-
-        // 각 스케줄별 좌석 상태 확인
-        foreach ($schedules as $schedule) {
-            echo "<br>스케줄 " . htmlspecialchars($schedule['SCHEDULE_ID']) . "의 좌석 상태:<br>";
-
-            $seatQuery = "
-                SELECT 
-                    COUNT(CASE WHEN ss.status = 'AVAILABLE' THEN 1 END) as available_seats,
-                    COUNT(CASE WHEN ss.status = 'OCCUPIED' THEN 1 END) as occupied_seats,
-                    COUNT(*) as total_seats
-                FROM SCHEDULE_SEATS ss
-                WHERE ss.schedule_id = :schedule_id
-            ";
-
-            $seatStatus = $db->executeQuery($seatQuery, [
-                'schedule_id' => $schedule['SCHEDULE_ID']
-            ])[0];
-
-            echo "전체 좌석: " . $seatStatus['TOTAL_SEATS'] . "<br>";
-            echo "예약 가능: " . $seatStatus['AVAILABLE_SEATS'] . "<br>";
-            echo "예약됨: " . $seatStatus['OCCUPIED_SEATS'] . "<br>";
-        }
-    } else {
-        echo "해당하는 스케줄이 없습니다.";
-    }
-
-} catch (Exception $e) {
-    echo "오류 발생: " . htmlspecialchars($e->getMessage());
-}
-?>
-
 <div class="container mx-auto p-4">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- 극장 선택 섹션 -->
@@ -233,12 +174,9 @@ try {
                 <div class="border-r">
                     <h3 class="font-bold mb-2">지역</h3>
                     <ul class="space-y-2">
-                        <?php
-                        $areas = getAreas();
-                        foreach($areas as $area):
-                            ?>
+                        <?php foreach($areas as $area): ?>
                             <li>
-                                <a href="?location=<?= urlencode($area['LOCATION']) ?>"
+                                <a href="?location=<?= urlencode($area['LOCATION']) ?><?= isset($_GET['movie']) ? '&movie='.$_GET['movie'] : '' ?>"
                                    class="block p-2 hover:bg-gray-100 rounded
                                    <?= isset($_GET['location']) && $_GET['location'] === $area['LOCATION'] ? 'bg-red-100' : '' ?>">
                                     <?= htmlspecialchars($area['LOCATION']) ?>
@@ -252,20 +190,15 @@ try {
                 <div>
                     <h3 class="font-bold mb-2">극장</h3>
                     <ul class="space-y-2">
-                        <?php
-                        $theaters = isset($_GET['location']) ?
-                            getTheaters($_GET['location']) :
-                            getTheaters();
-                        foreach($theaters as $theater):
-                            ?>
+                        <?php foreach($theaters as $theater): ?>
                             <li>
                                 <a href="?theater=<?= $theater['THEATER_ID'] ?><?= isset($_GET['movie']) ? '&movie='.$_GET['movie'] : '' ?>"
                                    class="block p-2 hover:bg-gray-100 rounded
-   <?= isset($_GET['theater']) && $_GET['theater'] == $theater['THEATER_ID'] ? 'bg-red-100' : '' ?>">
+                                   <?= isset($_GET['theater']) && $_GET['theater'] == $theater['THEATER_ID'] ? 'bg-red-100' : '' ?>">
                                     <?= htmlspecialchars($theater['THEATER_NAME']) ?>
                                     <span class="text-sm text-gray-500">
-        (<?= $theater['TOTAL_SEATS'] ?>석)
-    </span>
+                                        (<?= $theater['TOTAL_SEATS'] ?>석)
+                                    </span>
                                 </a>
                             </li>
                         <?php endforeach; ?>
@@ -278,10 +211,7 @@ try {
         <div class="bg-white p-4 rounded-lg shadow">
             <h2 class="text-xl font-bold mb-4">영화 선택</h2>
             <div class="space-y-4">
-                <?php
-                $movies = getMovies();
-                foreach($movies as $movie):
-                    ?>
+                <?php foreach($movies as $movie): ?>
                     <div class="flex items-center space-x-4 p-2 hover:bg-gray-100 rounded
                         <?= isset($_GET['movie']) && $_GET['movie'] == $movie['MOVIE_ID'] ? 'bg-red-100' : '' ?>">
                         <?php if ($movie['POSTER']): ?>
@@ -301,7 +231,7 @@ try {
                             </p>
                         </div>
                         <a href="?movie=<?= $movie['MOVIE_ID'] ?><?= isset($_GET['theater']) ? '&theater='.$_GET['theater'] : '' ?>"
-                                 class="ml-auto px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
+                           class="ml-auto px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600">
                             선택
                         </a>
                     </div>
@@ -314,41 +244,11 @@ try {
     <?php if(isset($_GET['theater']) && isset($_GET['movie'])): ?>
         <div class="mt-4 bg-white p-4 rounded-lg shadow">
             <h2 class="text-xl font-bold mb-4">상영 시간</h2>
-
             <?php
-            // 향후 7일간의 모든 상영 일정을 가져오는 함수로 수정
-            function getAllSchedules($theaterId, $movieId) {
-                global $db;
-                return $db->executeQuery(
-                    "SELECT s.*, t.theater_name, m.title, m.running_time, 
-                    (SELECT COUNT(*)
-                     FROM THEATER_SEATS ts
-                     WHERE ts.theater_id = s.theater_id) -
-                    (SELECT COUNT(*)
-                     FROM SCHEDULE_SEATS ss
-                     WHERE ss.schedule_id = s.schedule_id
-                     AND ss.status = 'OCCUPIED') as available_seats,
-                    TO_CHAR(s.start_time, 'YYYY-MM-DD') as schedule_date
-                FROM SCHEDULES s
-                JOIN THEATERS t ON s.theater_id = t.theater_id
-                JOIN MOVIES m ON s.movie_id = m.movie_id
-                WHERE s.theater_id = :theater_id
-                AND s.movie_id = :movie_id
-                AND s.start_time BETWEEN SYSDATE AND SYSDATE + 7
-                ORDER BY s.start_time",
-                    [
-                        'theater_id' => $theaterId,
-                        'movie_id' => $movieId
-                    ]
-                );
-            }
-
-            $allSchedules = getAllSchedules($_GET['theater'], $_GET['movie']);
-
-            // 날짜별로 스케줄 그룹화
+            // 날짜별 스케줄 그룹화
             $groupedSchedules = [];
-            foreach ($allSchedules as $schedule) {
-                $date = $schedule['SCHEDULE_DATE'];
+            foreach ($schedules as $schedule) {
+                $date = date('Y-m-d', strtotime($schedule['START_TIME']));
                 if (!isset($groupedSchedules[$date])) {
                     $groupedSchedules[$date] = [];
                 }
@@ -356,7 +256,7 @@ try {
             }
 
             if (count($groupedSchedules) > 0):
-                foreach ($groupedSchedules as $date => $schedules):
+                foreach ($groupedSchedules as $date => $daySchedules):
                     $dayOfWeek = date('w', strtotime($date));
                     $weekDay = ['일', '월', '화', '수', '목', '금', '토'][$dayOfWeek];
                     $isWeekend = $dayOfWeek == 0 || $dayOfWeek == 6;
@@ -366,17 +266,18 @@ try {
                             <?= date('Y년 m월 d일', strtotime($date)) ?> (<?= $weekDay ?>)
                         </h3>
                         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <?php foreach($schedules as $schedule): ?>
+                            <?php foreach($daySchedules as $schedule): ?>
                                 <div class="p-4 border rounded hover:bg-gray-50 cursor-pointer schedule-btn"
                                      data-schedule-id="<?= $schedule['SCHEDULE_ID'] ?>">
                                     <div class="font-bold">
                                         <?= date('H:i', strtotime($schedule['START_TIME'])) ?>
+                                        ~ <?= date('H:i', strtotime($schedule['START_TIME']) + ($schedule['RUNNING_TIME'] * 60)) ?>
+                                    </div>
+                                    <div class="text-gray-600">
+                                        잔여 <?= $theater['TOTAL_SEATS'] - $schedule['SCHEDULE_COUNT'] ?? '0' ?> / <?= $theater['TOTAL_SEATS'] ?> 석
                                     </div>
                                     <div class="text-sm text-gray-600">
-                                        잔여 <?= $schedule['AVAILABLE_SEATS'] ?>석
-                                    </div>
-                                    <div class="text-sm text-gray-600">
-                                        ~<?= date('H:i', strtotime($schedule['END_TIME'])) ?>
+
                                     </div>
                                 </div>
                             <?php endforeach; ?>
@@ -424,10 +325,6 @@ try {
         });
     });
 </script>
-
-<?php
-require_once '../includes/footer.php';
-?>
 
 </body>
 </html>

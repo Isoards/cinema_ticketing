@@ -47,7 +47,7 @@ JOIN THEATERS t on s.theater_id = t.theater_id
         ORDER BY r.reservation_date DESC
     ";
 
-    $reservations = $db->executeQuery($reservation_query, );
+    $reservations = $db->executeQuery($reservation_query);
 
     // 예약된 좌석 정보 조회
     $reservedSeats = $db->executeQuery(
@@ -77,7 +77,7 @@ WHERE u.user_id = :user_id
 ?>
 
 <!DOCTYPE html>
-<html>
+<html lang="">
 <head>
     <title>마이페이지</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">

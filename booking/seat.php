@@ -163,24 +163,6 @@ try {
 </head>
 <body class="bg-gray-100">
 
-<!-- 앱바 -->
-<div class="bg-white shadow-md">
-    <div class="container mx-auto px-4">
-        <div class="flex items-center justify-between h-16">
-            <div class="flex items-center">
-                <a href="index.php" class="text-gray-700 hover:text-gray-900">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-                    </svg>
-                </a>
-            </div>
-            <div class="flex items-center">
-                <span class="text-xl font-semibold text-gray-900">무비핑</span>
-            </div>
-            <div class="w-6"></div>
-        </div>
-    </div>
-</div>
 
 <?php if (isset($error_message)): ?>
     <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
