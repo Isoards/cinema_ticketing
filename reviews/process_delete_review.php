@@ -25,7 +25,7 @@ try {
 
 } catch (Exception $e) {
     $_SESSION['error'] = "리뷰 삭제 중 오류가 발생했습니다: " . $e->getMessage();
-    header('Location: review.php');
+    header('Location: ../mypage/');
     exit;
 }
 ?>

@@ -39,7 +39,7 @@ try {
     $profile = $db->executeQuery($profile_query, ['user_id' => $user_id]);
 
 // 예약 내역 조회
-    $reservation_query = "SELECT r.*, TO_CHAR(s.start_time, 'YYYY-MM-DD HH24:MI:SS') as start_time, s.end_time, m.title, m.running_time, t.theater_name
+    $reservation_query = "SELECT r.*, TO_CHAR(s.start_time, 'YYYY-MM-DD HH24:MI:SS') as start_time, m.title, m.running_time, t.theater_name
 FROM RESERVATIONS r
 JOIN SCHEDULES s on r.schedule_id = s.schedule_id
 JOIN MOVIES m on s.movie_id = m.movie_id
@@ -128,8 +128,8 @@ ORDER BY r.reservation_date DESC";
             <!-- 오른쪽 섹션 (예약 내역 + 리뷰) -->
             <div class="lg:w-2/3 space-y-8">
                 <!-- 예약 내역 -->
-                <div class="bg-white rounded-lg border-b-2 border-red-500">
-                    <h3 class="text-xl text-center font-bold text-gray-800 mb-4">예약 내역</h3>
+                <div class="bg-white rounded-lg">
+                    <h3 class="text-xl text-center font-bold text-gray-800 mb-4 border-b-2 border-red-500 ">예약 내역</h3>
                     <div class="space-y-4">
                         <?php if (!empty($reservations)): ?>
                             <?php foreach ($reservations as $reservation): ?>
@@ -137,7 +137,9 @@ ORDER BY r.reservation_date DESC";
                                     <h4 class="font-bold text-lg text-gray-800"><?php echo htmlspecialchars($reservation['TITLE']); ?></h4>
                                     <div class="mt-2 space-y-1 text-gray-600">
                                         <p><span class="font-medium">극장:</span> <?php echo htmlspecialchars($reservation['THEATER_NAME']); ?></p>
-                                        <p><span class="font-medium">상영 시간:</span> <?php echo date('Y-m-d H:i', strtotime($reservation['START_TIME'])); ?></p>
+                                        <p><span class="font-medium">상영 시간:</span> <?php echo date('Y-m-d H:i', strtotime($reservation['START_TIME'])); ?>
+                                            ~ <?= date('H:i', strtotime($reservation['START_TIME']) + ($reservation['RUNNING_TIME'] * 60)) ?>
+                                        </p>
                                         <p><span class="font-medium">좌석:</span>
                                             <?php
                                             $seats = getReservedSeats($db, $reservation['RESERVATION_ID']);
@@ -147,12 +149,21 @@ ORDER BY r.reservation_date DESC";
                                             }
                                             ?>
                                         </p>
-                                        <p>
-                                            <span class="font-medium">예약 상태:</span>
-                                            <span class="<?php echo $reservation['STATUS'] == 'Confirmed' ? 'text-green-600' : 'text-red-600'; ?> font-medium">
-                        <?php echo $reservation['STATUS'] == 'Confirmed' ? '예약 완료' : '취소됨'; ?>
-                    </span>
-                                        </p>
+                                        <div class="flex justify-between items-center mt-3">
+                                            <p>
+                                                <span class="font-medium">예약 상태:</span>
+                                                <span class="<?php echo $reservation['STATUS'] == 'Confirmed' ? 'text-green-600' : 'text-red-600'; ?> font-medium">
+                <?php echo $reservation['STATUS'] == 'Confirmed' ? '예약 완료' : '취소됨'; ?>
+            </span>
+                                            </p>
+                                            <?php if ($reservation['STATUS'] == 'Confirmed'): ?>
+                                                <a href="../booking/process_cancel_reservation.php?reservation_id=<?php echo $reservation['RESERVATION_ID']; ?>"
+                                                   onclick="return confirm('정말로 이 예약을 취소하시겠습니까?')"
+                                                   class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded transition-colors duration-300">
+                                                    예약 취소
+                                                </a>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                 </div>
                             <?php endforeach; ?>
@@ -163,8 +174,8 @@ ORDER BY r.reservation_date DESC";
                 </div>
 
                 <!-- 리뷰 섹션 -->
-                <div class="bg-white rounded-lg border-b-2 border-red-500">
-                    <h3 class="text-xl text-center font-bold text-gray-800 mb-4">내가 작성한 리뷰</h3>
+                <div class="bg-white rounded-lg">
+                    <h3 class="text-xl text-center font-bold text-gray-800 mb-4 border-b-2 border-red-500">내가 작성한 리뷰</h3>
                     <div class="space-y-4">
                         <?php if (!empty($reviews)): ?>
                             <?php foreach ($reviews as $review): ?>

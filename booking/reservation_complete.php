@@ -130,25 +130,12 @@ JOIN THEATERS t on s.theater_id = t.theater_id
         <div class="bg-white rounded-lg shadow-md p-6 mb-4">
             <h2 class="text-2xl font-bold mb-4">좌석 정보</h2>
 
-            <div class="overflow-x-auto">
-                <table class="min-w-full">
-                    <thead>
-                    <tr class="bg-gray-50">
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">좌석</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">구분</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">가격</th>
-                    </tr>
-                    </thead>
-                    <tbody class="bg-white divide-y divide-gray-200">
-                    <?php foreach ($reservedSeats as $seat): ?>
-                        <tr>
-                            <td class="px-6 py-4 whitespace-nowrap">
-                                <?= htmlspecialchars($seat['SEAT_ROW']) ?><?= htmlspecialchars($seat['SEAT_NUMBER']) ?>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
+            <div class="flex flex-wrap gap-3 justify-center">
+                <?php foreach ($reservedSeats as $seat): ?>
+                    <span class="inline-block bg-red-50 border-2 border-red-200 rounded-lg px-6 py-3 text-lg font-bold text-red-600 shadow-sm hover:shadow-md transition-shadow">
+               <?= htmlspecialchars($seat['SEAT_ROW']) ?><?= htmlspecialchars($seat['SEAT_NUMBER']) ?>
+           </span>
+                <?php endforeach; ?>
             </div>
         </div>
 
